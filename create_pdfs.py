@@ -42,13 +42,14 @@ def create_pdf(image_data, output_path, quality=85):
         try:
             img = Image.open(img_path)
 
+            # FIX: For MPO files (iPhone), ensure we only get the first frame
+            # and strip multi-frame data by converting to RGB immediately
+            img.seek(0)
+            img = img.convert('RGB')
+
             # Apply rotation if needed
             if rotation:
                 img = rotate_image(img, rotation)
-
-            # Convert to RGB if necessary
-            if img.mode in ('RGBA', 'P'):
-                img = img.convert('RGB')
 
             if first_image is None:
                 first_image = img

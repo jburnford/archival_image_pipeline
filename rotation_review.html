@@ -149,7 +149,8 @@
             <div class="stats">
                 Rotations: <span id="marked-count">0</span> |
                 Sections: <span id="section-count">0</span> |
-                Discards: <span id="discard-count">0</span>
+                Discards: <span id="discard-count">0</span> |
+                <span id="autosave-status" style="color: #4ade80;">Ready</span>
             </div>
         </div>
         <div>
@@ -184,8 +185,9 @@
             <hr style="border-color: #444; margin: 10px 0;">
             <button class="btn btn-nav" onclick="prevImage()">Previous (←)</button>
             <button class="btn btn-nav" onclick="nextImage()">Next (→)</button>
-            <button class="btn btn-load" onclick="loadCorrections()">Load Saved</button>
-            <button class="btn btn-save" onclick="saveCorrections()">Save Corrections</button>
+            <button class="btn btn-load" onclick="loadCorrections()">Load File</button>
+            <button class="btn btn-save" onclick="saveCorrections()">Export File</button>
+            <button class="btn btn-nav" onclick="clearAutoSave()" style="font-size: 12px;">Clear Auto-Save</button>
             <div class="shortcuts">
                 <strong>Keyboard:</strong><br>
                 <kbd>Space</kbd> OK, next<br>
@@ -209,6 +211,44 @@
         let sectionBreaks = new Set();  // filenames that start new sections
         let discards = new Set();  // filenames to discard
 
+        // Auto-save to localStorage after every change
+        function autoSave() {
+            const data = {
+                corrections: corrections,
+                sectionBreaks: Array.from(sectionBreaks),
+                discards: Array.from(discards),
+                lastImage: currentFilteredIndex,
+                timestamp: new Date().toISOString()
+            };
+            localStorage.setItem('banks_archive_review', JSON.stringify(data));
+            document.getElementById('autosave-status').textContent =
+                'Auto-saved: ' + new Date().toLocaleTimeString();
+        }
+
+        // Load from localStorage on startup
+        function loadAutoSave() {
+            const saved = localStorage.getItem('banks_archive_review');
+            if (saved) {
+                try {
+                    const data = JSON.parse(saved);
+                    const count = Object.keys(data.corrections || {}).length;
+                    const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleString() : 'unknown';
+                    if (confirm(`Found auto-saved session from ${timestamp}\n` +
+                                `(${count} rotations, ${(data.sectionBreaks || []).length} sections, ${(data.discards || []).length} discards)\n\n` +
+                                `Restore this session?`)) {
+                        corrections = data.corrections || {};
+                        sectionBreaks = new Set(data.sectionBreaks || []);
+                        discards = new Set(data.discards || []);
+                        currentFilteredIndex = data.lastImage || 0;
+                        return true;
+                    }
+                } catch (e) {
+                    console.error('Failed to load auto-save:', e);
+                }
+            }
+            return false;
+        }
+
         // Load image list from a text file or inline
         async function loadImageList() {
             try {
@@ -223,9 +263,18 @@
             }
 
             document.getElementById('total').textContent = images.length;
+
+            // Try to restore auto-saved session
+            const restored = loadAutoSave();
+
             resetFilter();
             if (images.length > 0) {
-                showImage(0);
+                if (restored) {
+                    showImage(currentFilteredIndex);
+                    updateMarkedCount();
+                } else {
+                    showImage(0);
+                }
             }
         }
 
@@ -319,6 +368,7 @@
             updateButtonStates(filename);
             updateMarkedCount();
             showImage(currentFilteredIndex);
+            autoSave();
         }
 
         function toggleDiscard() {
@@ -331,6 +381,7 @@
             updateButtonStates(filename);
             updateMarkedCount();
             showImage(currentFilteredIndex);
+            autoSave();
         }
 
         function markOk() {
@@ -338,6 +389,7 @@
             delete corrections[filename];
             updateButtonStates(filename);
             updateMarkedCount();
+            autoSave();
             nextImage();
         }
 
@@ -351,17 +403,33 @@
             updateButtonStates(filename);
             updateMarkedCount();
             showImage(currentFilteredIndex);  // Refresh display
+            autoSave();
         }
 
         function nextImage() {
             if (currentFilteredIndex < filteredIndices.length - 1) {
                 showImage(currentFilteredIndex + 1);
+                autoSave();  // Save position
             }
         }
 
         function prevImage() {
             if (currentFilteredIndex > 0) {
                 showImage(currentFilteredIndex - 1);
+                autoSave();  // Save position
+            }
+        }
+
+        function clearAutoSave() {
+            if (confirm('Clear all auto-saved data? This cannot be undone.')) {
+                localStorage.removeItem('banks_archive_review');
+                corrections = {};
+                sectionBreaks = new Set();
+                discards = new Set();
+                currentFilteredIndex = 0;
+                showImage(0);
+                updateMarkedCount();
+                document.getElementById('autosave-status').textContent = 'Cleared';
             }
         }
 
