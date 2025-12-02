@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rotation Review - Banks Archive</title>
+    <title>Image Review - Banks Archive</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -73,6 +73,23 @@
         .btn-rotate { background: #444; color: #fff; }
         .btn-rotate:hover { background: #555; }
         .btn-rotate.active { background: #c44; }
+        .btn-discard { background: #7f1d1d; color: #fff; }
+        .btn-discard:hover { background: #991b1b; }
+        .btn-discard.active { background: #dc2626; }
+        .btn-section { background: #1e40af; color: #fff; }
+        .btn-section:hover { background: #2563eb; }
+        .btn-section.active { background: #3b82f6; }
+        .image-container.discarded img { opacity: 0.3; }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+        .badge-discard { background: #dc2626; color: #fff; }
+        .badge-section { background: #3b82f6; color: #fff; }
         .btn-nav { background: #333; color: #fff; }
         .btn-nav:hover { background: #444; }
         .btn-save { background: #2563eb; color: #fff; margin-top: auto; }
@@ -130,7 +147,9 @@
                 <span id="current">1</span> / <span id="total">0</span>
             </div>
             <div class="stats">
-                Marked for rotation: <span id="marked-count">0</span>
+                Rotations: <span id="marked-count">0</span> |
+                Sections: <span id="section-count">0</span> |
+                Discards: <span id="discard-count">0</span>
             </div>
         </div>
         <div>
@@ -160,6 +179,9 @@
             <button class="btn btn-rotate" id="btn-180" onclick="markRotation(180)">Rotate 180° (2)</button>
             <button class="btn btn-rotate" id="btn-270" onclick="markRotation(270)">Rotate 270° (3)</button>
             <hr style="border-color: #444; margin: 10px 0;">
+            <button class="btn btn-section" id="btn-section" onclick="toggleSection()">New PDF Section (S)</button>
+            <button class="btn btn-discard" id="btn-discard" onclick="toggleDiscard()">Discard (D)</button>
+            <hr style="border-color: #444; margin: 10px 0;">
             <button class="btn btn-nav" onclick="prevImage()">Previous (←)</button>
             <button class="btn btn-nav" onclick="nextImage()">Next (→)</button>
             <button class="btn btn-load" onclick="loadCorrections()">Load Saved</button>
@@ -167,12 +189,11 @@
             <div class="shortcuts">
                 <strong>Keyboard:</strong><br>
                 <kbd>Space</kbd> OK, next<br>
-                <kbd>1</kbd> 90° rotation<br>
-                <kbd>2</kbd> 180° rotation<br>
-                <kbd>3</kbd> 270° rotation<br>
-                <kbd>←</kbd> Previous<br>
-                <kbd>→</kbd> Next<br>
-                <kbd>S</kbd> Save
+                <kbd>1</kbd> 90° <kbd>2</kbd> 180° <kbd>3</kbd> 270°<br>
+                <kbd>S</kbd> New section<br>
+                <kbd>D</kbd> Discard<br>
+                <kbd>←</kbd><kbd>→</kbd> Navigate<br>
+                <kbd>Ctrl+S</kbd> Save file
             </div>
         </div>
     </div>
@@ -185,6 +206,8 @@
         let filteredIndices = [];
         let currentFilteredIndex = 0;
         let corrections = {};  // {filename: rotation_degrees}
+        let sectionBreaks = new Set();  // filenames that start new sections
+        let discards = new Set();  // filenames to discard
 
         // Load image list from a text file or inline
         async function loadImageList() {
@@ -247,9 +270,12 @@
             const filename = images[realIndex];
 
             document.getElementById('current').textContent = filteredIdx + 1;
-            document.getElementById('current-image').src = filename;
-            document.getElementById('filename').innerHTML = filename +
-                (corrections[filename] ? ` <span class="needs-rotation">[ROTATE ${corrections[filename]}°]</span>` : '');
+            document.getElementById('current-image').src = 'final_preprocessed/' + filename;
+            let badges = '';
+            if (sectionBreaks.has(filename)) badges += '<span class="badge badge-section">NEW SECTION</span>';
+            if (discards.has(filename)) badges += '<span class="badge badge-discard">DISCARD</span>';
+            if (corrections[filename]) badges += `<span class="needs-rotation"> [ROTATE ${corrections[filename]}°]</span>`;
+            document.getElementById('filename').innerHTML = filename + badges;
 
             // Update button states
             updateButtonStates(filename);
@@ -268,10 +294,43 @@
             if (rotation === 90) img.classList.add('rotate-90');
             else if (rotation === 180) img.classList.add('rotate-180');
             else if (rotation === 270) img.classList.add('rotate-270');
+
+            // Update section and discard buttons
+            document.getElementById('btn-section').classList.toggle('active', sectionBreaks.has(filename));
+            document.getElementById('btn-discard').classList.toggle('active', discards.has(filename));
+
+            // Apply discard styling to image container
+            document.querySelector('.image-container').classList.toggle('discarded', discards.has(filename));
         }
 
         function updateMarkedCount() {
             document.getElementById('marked-count').textContent = Object.keys(corrections).length;
+            document.getElementById('section-count').textContent = sectionBreaks.size;
+            document.getElementById('discard-count').textContent = discards.size;
+        }
+
+        function toggleSection() {
+            const filename = images[getCurrentImageIndex()];
+            if (sectionBreaks.has(filename)) {
+                sectionBreaks.delete(filename);
+            } else {
+                sectionBreaks.add(filename);
+            }
+            updateButtonStates(filename);
+            updateMarkedCount();
+            showImage(currentFilteredIndex);
+        }
+
+        function toggleDiscard() {
+            const filename = images[getCurrentImageIndex()];
+            if (discards.has(filename)) {
+                discards.delete(filename);
+            } else {
+                discards.add(filename);
+            }
+            updateButtonStates(filename);
+            updateMarkedCount();
+            showImage(currentFilteredIndex);
         }
 
         function markOk() {
@@ -316,15 +375,19 @@
         }
 
         function saveCorrections() {
-            const data = JSON.stringify(corrections, null, 2);
-            const blob = new Blob([data], {type: 'application/json'});
+            const data = {
+                corrections: corrections,
+                sectionBreaks: Array.from(sectionBreaks),
+                discards: Array.from(discards)
+            };
+            const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'rotation_corrections.json';
+            a.download = 'image_review.json';
             a.click();
             URL.revokeObjectURL(url);
-            alert(`Saved ${Object.keys(corrections).length} corrections to rotation_corrections.json`);
+            alert(`Saved: ${Object.keys(corrections).length} rotations, ${sectionBreaks.size} sections, ${discards.size} discards`);
         }
 
         function loadCorrections() {
@@ -335,10 +398,22 @@
                 const file = e.target.files[0];
                 if (file) {
                     const text = await file.text();
-                    corrections = JSON.parse(text);
+                    const data = JSON.parse(text);
+
+                    // Handle both old format (just corrections) and new format
+                    if (data.corrections) {
+                        corrections = data.corrections;
+                        sectionBreaks = new Set(data.sectionBreaks || []);
+                        discards = new Set(data.discards || []);
+                    } else {
+                        corrections = data;
+                        sectionBreaks = new Set();
+                        discards = new Set();
+                    }
+
                     updateMarkedCount();
                     showImage(currentFilteredIndex);
-                    alert(`Loaded ${Object.keys(corrections).length} corrections`);
+                    alert(`Loaded: ${Object.keys(corrections).length} rotations, ${sectionBreaks.size} sections, ${discards.size} discards`);
                 }
             };
             input.click();
@@ -347,6 +422,13 @@
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             if (e.target.tagName === 'INPUT') return;
+
+            // Ctrl+S to save
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                saveCorrections();
+                return;
+            }
 
             switch(e.key) {
                 case ' ':
@@ -362,15 +444,19 @@
                 case '3':
                     markRotation(270);
                     break;
+                case 's':
+                case 'S':
+                    toggleSection();
+                    break;
+                case 'd':
+                case 'D':
+                    toggleDiscard();
+                    break;
                 case 'ArrowLeft':
                     prevImage();
                     break;
                 case 'ArrowRight':
                     nextImage();
-                    break;
-                case 's':
-                case 'S':
-                    saveCorrections();
                     break;
             }
         });
