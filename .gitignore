@@ -1,0 +1,36 @@
+# Images and processed output
+*.JPEG
+*.jpeg
+*.jpg
+*.png
+*.JPG
+*.PNG
+
+# Output directories
+preprocessed/
+final_preprocessed/
+rotated/
+test_smart/
+test_smart_batch/
+
+# Experimental automation scripts
+experiments/
+
+# Generated files
+image_list.txt
+*.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Other files
+*.pdf
+*.pdf:*
+doc.xml
+page/

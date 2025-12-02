@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rotation Review - Banks Archive</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            padding: 10px 20px;
+            background: #2a2a2a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .progress {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .stats {
+            font-size: 14px;
+            color: #888;
+        }
+        .main {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        .image-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            overflow: hidden;
+        }
+        .image-container img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            transition: transform 0.3s ease;
+        }
+        .image-container img.rotate-90 { transform: rotate(-90deg); }
+        .image-container img.rotate-180 { transform: rotate(180deg); }
+        .image-container img.rotate-270 { transform: rotate(90deg); }
+        .sidebar {
+            width: 200px;
+            background: #2a2a2a;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .btn {
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-ok { background: #2d5a27; color: #fff; }
+        .btn-ok:hover { background: #3d7a37; }
+        .btn-rotate { background: #444; color: #fff; }
+        .btn-rotate:hover { background: #555; }
+        .btn-rotate.active { background: #c44; }
+        .btn-nav { background: #333; color: #fff; }
+        .btn-nav:hover { background: #444; }
+        .btn-save { background: #2563eb; color: #fff; margin-top: auto; }
+        .btn-save:hover { background: #3b82f6; }
+        .btn-load { background: #7c3aed; color: #fff; }
+        .btn-load:hover { background: #8b5cf6; }
+        .shortcuts {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #666;
+            line-height: 1.8;
+        }
+        .shortcuts kbd {
+            background: #444;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        .filename {
+            text-align: center;
+            padding: 10px;
+            background: #2a2a2a;
+            font-family: monospace;
+        }
+        .needs-rotation {
+            color: #f87171;
+            font-weight: bold;
+        }
+        .filter-bar {
+            padding: 10px 20px;
+            background: #222;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .filter-bar label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+        }
+        .jump-input {
+            width: 80px;
+            padding: 5px;
+            background: #333;
+            border: 1px solid #555;
+            color: #fff;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <div class="progress">
+                <span id="current">1</span> / <span id="total">0</span>
+            </div>
+            <div class="stats">
+                Marked for rotation: <span id="marked-count">0</span>
+            </div>
+        </div>
+        <div>
+            <input type="number" id="jump-to" class="jump-input" placeholder="Go to #" min="1">
+            <button class="btn btn-nav" onclick="jumpTo()">Go</button>
+        </div>
+    </div>
+
+    <div class="filter-bar">
+        <label>
+            <input type="checkbox" id="show-only-marked" onchange="applyFilter()">
+            Show only marked for rotation
+        </label>
+        <label>
+            <input type="checkbox" id="show-only-unmarked" onchange="applyFilter()">
+            Show only unmarked
+        </label>
+    </div>
+
+    <div class="main">
+        <div class="image-container">
+            <img id="current-image" src="" alt="Document image">
+        </div>
+        <div class="sidebar">
+            <button class="btn btn-ok" onclick="markOk()">OK (Space)</button>
+            <button class="btn btn-rotate" id="btn-90" onclick="markRotation(90)">Rotate 90° (1)</button>
+            <button class="btn btn-rotate" id="btn-180" onclick="markRotation(180)">Rotate 180° (2)</button>
+            <button class="btn btn-rotate" id="btn-270" onclick="markRotation(270)">Rotate 270° (3)</button>
+            <hr style="border-color: #444; margin: 10px 0;">
+            <button class="btn btn-nav" onclick="prevImage()">Previous (←)</button>
+            <button class="btn btn-nav" onclick="nextImage()">Next (→)</button>
+            <button class="btn btn-load" onclick="loadCorrections()">Load Saved</button>
+            <button class="btn btn-save" onclick="saveCorrections()">Save Corrections</button>
+            <div class="shortcuts">
+                <strong>Keyboard:</strong><br>
+                <kbd>Space</kbd> OK, next<br>
+                <kbd>1</kbd> 90° rotation<br>
+                <kbd>2</kbd> 180° rotation<br>
+                <kbd>3</kbd> 270° rotation<br>
+                <kbd>←</kbd> Previous<br>
+                <kbd>→</kbd> Next<br>
+                <kbd>S</kbd> Save
+            </div>
+        </div>
+    </div>
+
+    <div class="filename" id="filename">Loading...</div>
+
+    <script>
+        // Image list will be populated from the file list
+        let images = [];
+        let filteredIndices = [];
+        let currentFilteredIndex = 0;
+        let corrections = {};  // {filename: rotation_degrees}
+
+        // Load image list from a text file or inline
+        async function loadImageList() {
+            try {
+                const response = await fetch('image_list.txt');
+                const text = await response.text();
+                images = text.trim().split('\n').filter(f => f.endsWith('.JPEG') || f.endsWith('.jpeg') || f.endsWith('.jpg') || f.endsWith('.png'));
+                images.sort();
+            } catch (e) {
+                // Fallback: try to load from inline script
+                console.error('Could not load image_list.txt, using fallback');
+                images = window.imageList || [];
+            }
+
+            document.getElementById('total').textContent = images.length;
+            resetFilter();
+            if (images.length > 0) {
+                showImage(0);
+            }
+        }
+
+        function resetFilter() {
+            filteredIndices = images.map((_, i) => i);
+            applyFilter();
+        }
+
+        function applyFilter() {
+            const showMarked = document.getElementById('show-only-marked').checked;
+            const showUnmarked = document.getElementById('show-only-unmarked').checked;
+
+            if (showMarked && showUnmarked) {
+                // Both checked = show all
+                filteredIndices = images.map((_, i) => i);
+            } else if (showMarked) {
+                filteredIndices = images.map((_, i) => i).filter(i => corrections[images[i]]);
+            } else if (showUnmarked) {
+                filteredIndices = images.map((_, i) => i).filter(i => !corrections[images[i]]);
+            } else {
+                filteredIndices = images.map((_, i) => i);
+            }
+
+            document.getElementById('total').textContent = filteredIndices.length;
+
+            // Try to stay on current image or go to first
+            if (filteredIndices.length > 0) {
+                currentFilteredIndex = Math.min(currentFilteredIndex, filteredIndices.length - 1);
+                showImage(currentFilteredIndex);
+            }
+        }
+
+        function getCurrentImageIndex() {
+            return filteredIndices[currentFilteredIndex];
+        }
+
+        function showImage(filteredIdx) {
+            if (filteredIdx < 0 || filteredIdx >= filteredIndices.length) return;
+
+            currentFilteredIndex = filteredIdx;
+            const realIndex = filteredIndices[filteredIdx];
+            const filename = images[realIndex];
+
+            document.getElementById('current').textContent = filteredIdx + 1;
+            document.getElementById('current-image').src = filename;
+            document.getElementById('filename').innerHTML = filename +
+                (corrections[filename] ? ` <span class="needs-rotation">[ROTATE ${corrections[filename]}°]</span>` : '');
+
+            // Update button states
+            updateButtonStates(filename);
+            updateMarkedCount();
+        }
+
+        function updateButtonStates(filename) {
+            const rotation = corrections[filename] || 0;
+            document.getElementById('btn-90').classList.toggle('active', rotation === 90);
+            document.getElementById('btn-180').classList.toggle('active', rotation === 180);
+            document.getElementById('btn-270').classList.toggle('active', rotation === 270);
+
+            // Apply visual rotation preview
+            const img = document.getElementById('current-image');
+            img.classList.remove('rotate-90', 'rotate-180', 'rotate-270');
+            if (rotation === 90) img.classList.add('rotate-90');
+            else if (rotation === 180) img.classList.add('rotate-180');
+            else if (rotation === 270) img.classList.add('rotate-270');
+        }
+
+        function updateMarkedCount() {
+            document.getElementById('marked-count').textContent = Object.keys(corrections).length;
+        }
+
+        function markOk() {
+            const filename = images[getCurrentImageIndex()];
+            delete corrections[filename];
+            updateButtonStates(filename);
+            updateMarkedCount();
+            nextImage();
+        }
+
+        function markRotation(degrees) {
+            const filename = images[getCurrentImageIndex()];
+            if (corrections[filename] === degrees) {
+                delete corrections[filename];  // Toggle off
+            } else {
+                corrections[filename] = degrees;
+            }
+            updateButtonStates(filename);
+            updateMarkedCount();
+            showImage(currentFilteredIndex);  // Refresh display
+        }
+
+        function nextImage() {
+            if (currentFilteredIndex < filteredIndices.length - 1) {
+                showImage(currentFilteredIndex + 1);
+            }
+        }
+
+        function prevImage() {
+            if (currentFilteredIndex > 0) {
+                showImage(currentFilteredIndex - 1);
+            }
+        }
+
+        function jumpTo() {
+            const input = document.getElementById('jump-to');
+            const num = parseInt(input.value);
+            if (num >= 1 && num <= filteredIndices.length) {
+                showImage(num - 1);
+            }
+            input.value = '';
+        }
+
+        function saveCorrections() {
+            const data = JSON.stringify(corrections, null, 2);
+            const blob = new Blob([data], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'rotation_corrections.json';
+            a.click();
+            URL.revokeObjectURL(url);
+            alert(`Saved ${Object.keys(corrections).length} corrections to rotation_corrections.json`);
+        }
+
+        function loadCorrections() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const text = await file.text();
+                    corrections = JSON.parse(text);
+                    updateMarkedCount();
+                    showImage(currentFilteredIndex);
+                    alert(`Loaded ${Object.keys(corrections).length} corrections`);
+                }
+            };
+            input.click();
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT') return;
+
+            switch(e.key) {
+                case ' ':
+                    e.preventDefault();
+                    markOk();
+                    break;
+                case '1':
+                    markRotation(90);
+                    break;
+                case '2':
+                    markRotation(180);
+                    break;
+                case '3':
+                    markRotation(270);
+                    break;
+                case 'ArrowLeft':
+                    prevImage();
+                    break;
+                case 'ArrowRight':
+                    nextImage();
+                    break;
+                case 's':
+                case 'S':
+                    saveCorrections();
+                    break;
+            }
+        });
+
+        // Initialize
+        loadImageList();
+    </script>
+</body>
+</html>
