@@ -138,9 +138,88 @@
             color: #fff;
             border-radius: 4px;
         }
+        /* Setup screen styles */
+        .setup-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #1a1a1a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .setup-screen.hidden { display: none; }
+        .setup-box {
+            background: #2a2a2a;
+            padding: 40px;
+            border-radius: 12px;
+            text-align: center;
+            max-width: 500px;
+        }
+        .setup-box h1 {
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        .setup-box p {
+            color: #888;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        .setup-btn {
+            padding: 15px 30px;
+            font-size: 18px;
+            background: #2563eb;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        .setup-btn:hover { background: #3b82f6; }
+        .setup-btn-secondary {
+            background: #444;
+        }
+        .setup-btn-secondary:hover { background: #555; }
+        .folder-name {
+            margin-top: 20px;
+            padding: 10px;
+            background: #333;
+            border-radius: 4px;
+            font-family: monospace;
+            color: #4ade80;
+        }
+        .folder-name.hidden { display: none; }
     </style>
 </head>
 <body>
+    <!-- Setup Screen -->
+    <div class="setup-screen" id="setup-screen">
+        <div class="setup-box">
+            <h1>Image Review Tool</h1>
+            <p>Choose how to load your images:</p>
+            <div>
+                <button class="setup-btn" onclick="selectFolder()">
+                    📁 Select Image Folder
+                </button>
+            </div>
+            <div style="margin: 20px 0; color: #666;">— or —</div>
+            <div>
+                <button class="setup-btn setup-btn-secondary" onclick="useServerMode()">
+                    🌐 Use Server Mode
+                </button>
+            </div>
+            <p style="font-size: 12px; margin-top: 20px;">
+                <strong>Folder mode:</strong> Select a local folder directly<br>
+                <strong>Server mode:</strong> Uses image_list.txt + final_preprocessed/
+            </p>
+            <div class="folder-name hidden" id="selected-folder"></div>
+            <input type="file" id="folder-input" webkitdirectory multiple style="display: none;" onchange="handleFolderSelect(event)">
+        </div>
+    </div>
+
     <div class="header">
         <div>
             <div class="progress">
@@ -188,6 +267,7 @@
             <button class="btn btn-load" onclick="loadCorrections()">Load File</button>
             <button class="btn btn-save" onclick="saveCorrections()">Export File</button>
             <button class="btn btn-nav" onclick="clearAutoSave()" style="font-size: 12px;">Clear Auto-Save</button>
+            <button class="btn btn-nav" onclick="changeFolder()" style="font-size: 12px;">Change Folder</button>
             <div class="shortcuts">
                 <strong>Keyboard:</strong><br>
                 <kbd>Space</kbd> OK, next<br>
@@ -204,12 +284,99 @@
 
     <script>
         // Image list will be populated from the file list
-        let images = [];
+        let images = [];  // Array of filenames
+        let imageFiles = {};  // Map of filename -> File object (for folder mode)
+        let imageUrls = {};  // Map of filename -> object URL (for folder mode)
         let filteredIndices = [];
         let currentFilteredIndex = 0;
         let corrections = {};  // {filename: rotation_degrees}
         let sectionBreaks = new Set();  // filenames that start new sections
         let discards = new Set();  // filenames to discard
+        let isServerMode = false;  // true = use server paths, false = use local files
+
+        // Setup screen functions
+        function selectFolder() {
+            document.getElementById('folder-input').click();
+        }
+
+        function handleFolderSelect(event) {
+            const files = Array.from(event.target.files);
+            const imageExtensions = ['.jpeg', '.jpg', '.png', '.gif', '.webp'];
+
+            // Filter to only image files
+            const imageFilesList = files.filter(f => {
+                const ext = f.name.toLowerCase().slice(f.name.lastIndexOf('.'));
+                return imageExtensions.includes(ext);
+            });
+
+            if (imageFilesList.length === 0) {
+                alert('No image files found in the selected folder.');
+                return;
+            }
+
+            // Sort by filename
+            imageFilesList.sort((a, b) => a.name.localeCompare(b.name));
+
+            // Store files and create object URLs
+            images = [];
+            imageFiles = {};
+            imageUrls = {};
+
+            for (const file of imageFilesList) {
+                images.push(file.name);
+                imageFiles[file.name] = file;
+                imageUrls[file.name] = URL.createObjectURL(file);
+            }
+
+            isServerMode = false;
+
+            // Show folder info
+            const folderName = imageFilesList[0].webkitRelativePath.split('/')[0];
+            document.getElementById('selected-folder').textContent =
+                `Selected: ${folderName} (${images.length} images)`;
+            document.getElementById('selected-folder').classList.remove('hidden');
+
+            // Start the review
+            setTimeout(() => startReview(), 500);
+        }
+
+        function useServerMode() {
+            isServerMode = true;
+            startReview();
+        }
+
+        function startReview() {
+            document.getElementById('setup-screen').classList.add('hidden');
+
+            if (isServerMode) {
+                loadImageList();
+            } else {
+                // Already loaded from folder selection
+                document.getElementById('total').textContent = images.length;
+
+                // Try to restore auto-saved session
+                const restored = loadAutoSave();
+
+                resetFilter();
+                if (images.length > 0) {
+                    if (restored) {
+                        showImage(currentFilteredIndex);
+                        updateMarkedCount();
+                    } else {
+                        showImage(0);
+                    }
+                }
+            }
+        }
+
+        // Get image source URL
+        function getImageSrc(filename) {
+            if (isServerMode) {
+                return 'final_preprocessed/' + filename;
+            } else {
+                return imageUrls[filename] || '';
+            }
+        }
 
         // Auto-save to localStorage after every change
         function autoSave() {
@@ -319,7 +486,7 @@
             const filename = images[realIndex];
 
             document.getElementById('current').textContent = filteredIdx + 1;
-            document.getElementById('current-image').src = 'final_preprocessed/' + filename;
+            document.getElementById('current-image').src = getImageSrc(filename);
             let badges = '';
             if (sectionBreaks.has(filename)) badges += '<span class="badge badge-section">NEW SECTION</span>';
             if (discards.has(filename)) badges += '<span class="badge badge-discard">DISCARD</span>';
@@ -433,6 +600,21 @@
             }
         }
 
+        function changeFolder() {
+            // Clean up existing object URLs to free memory
+            for (const url of Object.values(imageUrls)) {
+                URL.revokeObjectURL(url);
+            }
+            // Reset state
+            images = [];
+            imageFiles = {};
+            imageUrls = {};
+            // Show setup screen again
+            document.getElementById('setup-screen').classList.remove('hidden');
+            document.getElementById('selected-folder').classList.add('hidden');
+            document.getElementById('folder-input').value = '';
+        }
+
         function jumpTo() {
             const input = document.getElementById('jump-to');
             const num = parseInt(input.value);
@@ -529,8 +711,8 @@
             }
         });
 
-        // Initialize
-        loadImageList();
+        // Initialize - wait for user to select mode via setup screen
+        // (loadImageList is called by useServerMode or images loaded by handleFolderSelect)
     </script>
 </body>
 </html>

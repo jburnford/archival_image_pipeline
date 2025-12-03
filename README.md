@@ -12,6 +12,24 @@ This pipeline helps prepare historical document photographs for transcription by
 
 ## Quick Start
 
+### Option A: Direct Folder Selection (Recommended)
+
+```bash
+# 1. Open the HTML file directly in your browser
+# (or start a local server: python3 -m http.server 8080)
+
+# 2. Click "Select Image Folder" and choose your images directory
+
+# 3. Review images, mark rotations/sections/discards
+
+# 4. Export corrections (Ctrl+S or "Export File" button)
+
+# 5. Generate PDFs
+python3 create_pdfs.py -r image_review.json -i /path/to/your/images -o pdfs
+```
+
+### Option B: Server Mode (Legacy)
+
 ```bash
 # 1. Generate image list
 ls final_preprocessed/*.JPEG > image_list.txt
@@ -19,16 +37,10 @@ ls final_preprocessed/*.JPEG > image_list.txt
 # 2. Start the review server
 python3 -m http.server 8080
 
-# 3. Open the review tool in your browser
+# 3. Open the review tool and click "Use Server Mode"
 # http://localhost:8080/rotation_review.html
 
-# 4. After review, export your corrections (Ctrl+S or "Export File" button)
-
-# 5. Copy the exported JSON to the project directory
-cp ~/Downloads/image_review.json .
-
-# 6. Generate PDFs
-python3 create_pdfs.py -r image_review.json -i final_preprocessed -o pdfs
+# 4-6. Same as above
 ```
 
 ## Workflow
@@ -46,11 +58,13 @@ ls final_preprocessed/*.JPEG | xargs -n1 basename > image_list.txt
 
 ### Step 2: Review Images
 
-Start a local web server and open the review tool:
-```bash
-python3 -m http.server 8080
-# Open: http://localhost:8080/rotation_review.html
-```
+Open the review tool:
+- **Direct method**: Open `rotation_review.html` in your browser and select your image folder
+- **Server method**: Start `python3 -m http.server 8080` and open http://localhost:8080/rotation_review.html
+
+The tool supports two modes:
+1. **Folder Mode**: Select any local folder directly - no server needed
+2. **Server Mode**: Uses `image_list.txt` and serves from `final_preprocessed/`
 
 #### Keyboard Shortcuts
 
