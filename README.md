@@ -85,6 +85,9 @@ The tool supports two modes:
 - **Auto-save**: All changes saved to browser localStorage automatically
 - **Session restore**: Prompts to restore previous session on page load
 - **Filters**: Show only marked/unmarked images for focused review
+- **Load File**: Import an existing corrections JSON to continue work
+- **Change Folder**: Switch to a different image folder mid-session
+- **Jump to**: Go directly to a specific image number
 
 ### Step 3: Export Corrections
 
@@ -120,6 +123,19 @@ Options:
 - `-p, --prefix`: PDF filename prefix (default: `banks_archive`)
 - `-q, --quality`: JPEG quality for PDF (default: 85)
 - `-m, --max-size`: Max PDF size in MB if no sections defined (default: 200)
+
+### Alternative: Apply Rotations to Files
+
+If you want to rotate the actual image files instead of embedding rotations in PDFs:
+
+```bash
+python3 apply_corrections.py -c image_review.json -o rotated_images/
+```
+
+Options:
+- `-c, --corrections`: Path to corrections JSON file
+- `-o, --output`: Output directory for rotated images
+- `--copy-unchanged`: Also copy images that don't need rotation
 
 ## File Structure
 
@@ -166,6 +182,34 @@ Mark section breaks at the **first image** of each new section (folder, document
 - Python 3.7+
 - Pillow (`pip install Pillow`)
 - Modern web browser (for review tool)
+
+### Browser Compatibility
+
+The folder selection feature uses the `webkitdirectory` API:
+- ✅ Chrome, Edge, Brave (full support)
+- ✅ Firefox (full support)
+- ⚠️ Safari (limited support)
+
+If folder selection doesn't work, use Server Mode instead.
+
+## Troubleshooting
+
+### "No image files found"
+- Ensure your folder contains `.jpg`, `.jpeg`, or `.png` files
+- Check that files aren't in subdirectories (only top-level files are loaded)
+
+### Images appear duplicated in PDF
+- This was caused by iPhone MPO format - fixed in current version
+- Ensure you're using the latest `create_pdfs.py`
+
+### Auto-save not working
+- Check browser's localStorage isn't disabled
+- Try a different browser
+- Use "Export File" to manually save your work
+
+### Rotations not applied
+- Ensure you exported the corrections file after making changes
+- Check that the JSON file path is correct when running `create_pdfs.py`
 
 ## License
 
